@@ -1,20 +1,102 @@
-# Reproducible Research: Peer Assessment 1
+Reproducible Data Peer Assessment 1
+=====================
 
+First we load the data:
 
-## Loading and preprocessing the data
+```{r echo = T}
+data <- read.csv('activity.csv')
+str(data)
+```
 
+Looks like read.csv pulled in the dates as factors -- let's convert them to
+dates:
 
+```{r echo = T}
+data$date <- as.Date(data$date)
+str(data)
+```
 
-## What is mean total number of steps taken per day?
+Great.  Now, let's find out some info about total number of steps taken per day.
 
+Let's look at mean total number of steps taken per day.  First we get the unique
+dates, then we get the total steps for each day (ignoring na's).  Finally, we
+make a histogram plot of the total counts.
 
+```{r echo = T}
+unique_dates <- unique(data$date)
+date_total <- function (d) sum(na.exclude = T, data$steps[data$date == d])
+daily_steps <- sapply(unique_dates, date_total)
+hist(daily_steps)
+```
 
-## What is the average daily activity pattern?
+Now let's summarize the daily_steps to see the mean and median:
 
+```{r echo = T}
+summary(daily_steps)
+```
 
+Now let's look at average steps taken by time interval.  First, like with days,
+we'll get the unique time intervals.  Then we'll average over all days the
+number of steps taken in each of those intervals (excluding na's). Finally, we
+can plot the results:
 
-## Imputing missing values
+```{r echo = T}
+time_intervals <- unique(data$interval)
+mean_by_itvl <- function (i) mean(na.rm = T, data$steps[data$interval == i])
+mean_steps_by_itvl <- sapply(time_intervals, mean_by_itvl)
+plot(time_intervals, mean_steps_by_itvl)
+```
 
+We can also find the time interval with the maximum average number of steps
+across the days:
 
+```{r echo = T}
+time_intervals[mean_steps_by_itvl == max(mean_steps_by_itvl)]
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+Looks like it's 8:35-8:40 in the morning.
+
+Let's think about how to deal with the missing values in our dataset.
+First, how many are there?
+
+```{r echo = T}
+sum(is.na(data$steps))
+nrow(data)
+sum(is.na(data$steps)) / nrow(data)
+```
+
+Maybe those na's are biasing our findings.  Let's fill each na with the average
+number of steps for that time interval over the available days, and recalculate
+the mean and median number of steps per day:
+
+```{r echo = T}
+named_mean_steps_by_itvl <- setNames(mean_steps_by_itvl, 
+                                     as.character(time_intervals))
+lookup_mean <- function (i) {
+        named_mean_steps_by_itvl[[(as.character(data$interval[[i]]))]] }
+filled_steps <- sapply(1:length(data$steps), 
+                       function (i) { 
+                               if (!is.na(data$steps[[i]]))
+                                       data$steps[[i]] 
+                               else lookup_mean(i)})
+filled_date_total <- function (d) sum(na.exclude = T, filled_steps[data$date == d])
+filled_daily_steps <- sapply(unique_dates, filled_date_total)
+hist(filled_daily_steps)
+summary(filled_daily_steps)
+```
+
+This filling raises the 1st quartile and lowers the 3rd, but leaves the min,
+max, median, and mean the same.  It slightly raises the average of the total
+daily number of steps.
+
+Finally, lets compare weekends and weekdays, using the filled steps data:
+
+```{r echo = T}
+data_w_filled_steps <- data
+data_w_filled_steps$steps <- filled_steps
+days_of_week <- sapply(data_w_filled_steps$date, function (d) weekdays(d))
+is_weekend <- as.factor(sapply(days_of_week, function (d) d == 'Sunday' | d == 'Saturday'))
+split_by_weekend <- split(data_w_filled_steps, is_weekend)
+weekends_only <- split_by_weekend[[1]]
+weekdays_only <- split_by_weekend[[2]]
+```
